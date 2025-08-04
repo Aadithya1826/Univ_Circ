@@ -1,0 +1,11 @@
+Flask
+transformers
+sentence-transformers
+python-docx
+psycopg2-binary
+Pillow
+pdfminer.six
+python-docx
+llama-cpp-python
+tqdm
+pytesseract
