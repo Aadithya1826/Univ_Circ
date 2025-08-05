@@ -30,8 +30,8 @@ if not os.path.exists(MODEL_PATH):
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     subprocess.run(['gsutil', 'cp', GCS_PATH, MODEL_PATH], check=True)
 
-embedder = SentenceTransformer('all-MiniLM-L6-v2')
-llm = Llama(model_path=MODEL_PATH, n_ctx=4096, n_threads=8, n_batch=512)
+# embedder = SentenceTransformer('all-MiniLM-L6-v2')
+# llm = Llama(model_path=MODEL_PATH, n_ctx=4096, n_threads=8, n_batch=512)
 
 def get_db_connection():
     return psycopg2.connect(
@@ -127,3 +127,4 @@ def upload_and_process():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
+
