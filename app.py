@@ -1,3 +1,4 @@
+# === app.py ===
 from flask import Flask, request, jsonify, render_template
 import os
 import pytesseract
@@ -12,33 +13,26 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from llama_cpp import Llama
 from sentence_transformers import SentenceTransformer, util
-from huggingface_hub import hf_hub_download
+import subprocess
 
-# === Config & Setup ===
 UPLOAD_FOLDER = './uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+MODEL_PATH = './models/mistral-7b-instruct-v0.1.Q4_K_M.gguf'
+GCS_PATH = 'gs://univ_circ/mistral-7b-instruct-v0.1.Q4_K_M.gguf'
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Tesseract setup (adjust or comment for production)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 pytesseract.pytesseract.tesseract_cmd = r"/usr/bin/tesseract"
 
-# === Load Models ===
+if not os.path.exists(MODEL_PATH):
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+    subprocess.run(['gsutil', 'cp', GCS_PATH, MODEL_PATH], check=True)
+
 embedder = SentenceTransformer('all-MiniLM-L6-v2')
-llm = Llama(
-    model_path=hf_hub_download(
-        repo_id="Aadithya1826/Mistral_7B",
-        filename="mistral-7b-instruct-v0.1.Q4_K_M.gguf",
-        local_dir="./models"
-    ),
-    n_ctx=4096,
-    n_threads=8,
-    n_batch=512
-)
+llm = Llama(model_path=MODEL_PATH, n_ctx=4096, n_threads=8, n_batch=512)
 
-
-# === PostgreSQL DB connection helper ===
 def get_db_connection():
     return psycopg2.connect(
         dbname=os.environ.get('DB_NAME'),
@@ -48,25 +42,21 @@ def get_db_connection():
         port=os.environ.get('DB_PORT', 5432)
     )
 
-# === Text Extraction ===
 def extract_text(file_path):
     ext = file_path.split('.')[-1].lower()
     if ext == 'pdf':
         return extract_pdf(file_path)
     elif ext == 'docx':
-        doc = Document(file_path)
-        return "\n".join([p.text for p in doc.paragraphs])
+        return "\n".join([p.text for p in Document(file_path).paragraphs])
     elif ext in ['png', 'jpg', 'jpeg']:
         return pytesseract.image_to_string(Image.open(file_path))
     return ''
 
-# === Summarization ===
 def summarize_text(text):
     prompt = f"[INST] Summarize the university circular:\n\n{text} [/INST]"
     output = llm(prompt, max_tokens=300, stop=["</s>"])
     return output["choices"][0]["text"].strip()
 
-# === Department Detection ===
 def get_department_info():
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -79,9 +69,7 @@ def detect_departments_by_similarity(summary):
     summary_embedding = embedder.encode(summary, convert_to_tensor=True)
     scores = util.cos_sim(summary_embedding, dept_embeddings)[0]
     best_score = scores.max().item()
-    if best_score > 0.5:
-        return [departments[scores.argmax().item()]]
-    return ['ALL']
+    return [departments[scores.argmax().item()]] if best_score > 0.5 else ['ALL']
 
 def get_students(departments):
     with get_db_connection() as conn:
@@ -92,7 +80,6 @@ def get_students(departments):
                 cur.execute("SELECT name, email FROM students WHERE department = ANY(%s)", (departments,))
             return cur.fetchall()
 
-# === Emailing ===
 def send_email(name, email, summary, file_path):
     def send():
         msg = MIMEMultipart()
@@ -116,7 +103,6 @@ def send_email(name, email, summary, file_path):
 
     threading.Thread(target=send).start()
 
-# === Routes ===
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -138,9 +124,6 @@ def upload_and_process():
 
     return jsonify({'summary': summary, 'status': f"Summary sent to: {', '.join(departments)} department(s)."})
 
-# === Run on Railway ===
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
-
