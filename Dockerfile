@@ -1,35 +1,39 @@
-# Use slim Python base
+# === Dockerfile ===
 FROM python:3.11-slim
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    gcc \
-    g++ \
-    libopenblas-dev \
-    liblapack-dev \
-    libjpeg-dev \
-    libgl1 \
-    git \
-    tesseract-ocr \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        gcc \
+        g++ \
+        libopenblas-dev \
+        liblapack-dev \
+        libjpeg-dev \
+        libgl1 \
+        git \
+        curl \
+        gnupg \
+        && rm -rf /var/lib/apt/lists/*
+
+# Install Google Cloud SDK for gsutil
+RUN curl -sSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && \
+    echo "deb https://packages.cloud.google.com/apt cloud-sdk main" | tee /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    apt-get update && apt-get install -y google-cloud-sdk
 
 # Set working directory
 WORKDIR /app
 
-# Copy requirements and install Python packages
+# Copy dependency list and install
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy application code
+# Copy all application files
 COPY . .
 
-# Environment
-ENV PORT=8080
+# Set env port
+ENV PORT 8080
 
-# Expose Flask port
-EXPOSE 8080
-
-# Run the app
+# Run the application
 CMD ["python", "app.py"]
