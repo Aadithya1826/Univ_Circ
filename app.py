@@ -52,7 +52,7 @@ if not os.path.exists(EMBEDDER_DIR):
 @lru_cache()
 def get_embedder():
     from sentence_transformers import SentenceTransformer
-    return SentenceTransformer(EMBEDDER_DIR)
+    return SentenceTransformer('all-MiniLM-L6-v2')  # downloads at runtime
 
 llm = Llama(model_path=MODEL_PATH, n_ctx=4096, n_threads=8, n_batch=512)
 
@@ -150,3 +150,4 @@ def upload_and_process():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
+
