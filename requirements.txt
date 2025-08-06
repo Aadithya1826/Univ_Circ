@@ -10,3 +10,5 @@ llama-cpp-python
 tqdm
 google-cloud-storage
 pytesseract
+torch
+smtplib3
