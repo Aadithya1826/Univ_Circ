@@ -33,6 +33,10 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 # Copy all application files
+COPY app.py .
+COPY templates/ ./templates/
+COPY static/ ./static/
+COPY uploads/ ./uploads/
 COPY . .
 
 # Set env port
@@ -40,4 +44,5 @@ ENV PORT 8080
 
 # Run the application
 CMD ["python", "app.py"]
+
 
