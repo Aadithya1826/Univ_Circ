@@ -1,4 +1,3 @@
-# === app.py ===
 from flask import Flask, request, jsonify, render_template
 import os
 import pytesseract
@@ -12,25 +11,49 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from llama_cpp import Llama
-from sentence_transformers import SentenceTransformer, util
-import subprocess
+from sentence_transformers import util
+from functools import lru_cache
+from google.cloud import storage
 
 UPLOAD_FOLDER = './uploads'
+EMBEDDER_DIR = './sentence_model'
+EMBEDDER_GCS_PATH = 'sentence_model/'
+BUCKET_NAME = 'univ_circ'
 MODEL_PATH = './models/mistral-7b-instruct-v0.1.Q4_K_M.gguf'
-GCS_PATH = 'gs://univ_circ/mistral-7b-instruct-v0.1.Q4_K_M.gguf'
+MODEL_GCS_PATH = 'mistral-7b-instruct-v0.1.Q4_K_M.gguf'
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
 
 pytesseract.pytesseract.tesseract_cmd = r"/usr/bin/tesseract"
 
-if not os.path.exists(MODEL_PATH):
-    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-    subprocess.run(['gsutil', 'cp', GCS_PATH, MODEL_PATH], check=True)
+def download_from_gcs(bucket_name, gcs_path, local_path):
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(gcs_path)
+    blob.download_to_filename(local_path)
 
-embedder = SentenceTransformer('all-MiniLM-L6-v2')
+if not os.path.exists(MODEL_PATH):
+    download_from_gcs(BUCKET_NAME, MODEL_GCS_PATH, MODEL_PATH)
+
+if not os.path.exists(EMBEDDER_DIR):
+    client = storage.Client()
+    bucket = client.bucket(BUCKET_NAME)
+    blobs = client.list_blobs(BUCKET_NAME, prefix=EMBEDDER_GCS_PATH)
+    for blob in blobs:
+        rel_path = blob.name[len(EMBEDDER_GCS_PATH):].lstrip('/')
+        local_path = os.path.join(EMBEDDER_DIR, rel_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        blob.download_to_filename(local_path)
+
+@lru_cache()
+def get_embedder():
+    from sentence_transformers import SentenceTransformer
+    return SentenceTransformer(EMBEDDER_DIR)
+
 llm = Llama(model_path=MODEL_PATH, n_ctx=4096, n_threads=8, n_batch=512)
 
 def get_db_connection():
@@ -65,8 +88,8 @@ def get_department_info():
 
 def detect_departments_by_similarity(summary):
     departments = get_department_info()
-    dept_embeddings = embedder.encode(departments, convert_to_tensor=True)
-    summary_embedding = embedder.encode(summary, convert_to_tensor=True)
+    dept_embeddings = get_embedder().encode(departments, convert_to_tensor=True)
+    summary_embedding = get_embedder().encode(summary, convert_to_tensor=True)
     scores = util.cos_sim(summary_embedding, dept_embeddings)[0]
     best_score = scores.max().item()
     return [departments[scores.argmax().item()]] if best_score > 0.5 else ['ALL']
@@ -127,5 +150,3 @@ def upload_and_process():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
-
-
