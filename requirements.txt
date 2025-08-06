@@ -8,4 +8,5 @@ pdfminer.six
 python-docx
 llama-cpp-python
 tqdm
+google-cloud-storage
 pytesseract
