@@ -13,6 +13,9 @@ RUN apt-get update && \
         libjpeg-dev \
         libgl1 \
         git \
+        tesseract-ocr \
+        poppler-utils \
+        gsutil \
         curl \
         gnupg \
         && rm -rf /var/lib/apt/lists/*
@@ -37,3 +40,4 @@ ENV PORT 8080
 
 # Run the application
 CMD ["python", "app.py"]
+
